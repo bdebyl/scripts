@@ -113,7 +113,7 @@ if [ "$debug" ]; then
 else
     test_dns="$(aws route53 test-dns-answer --hosted-zone-id "$zone_id" \
                 --record-name "$ddns_hostname" --record-type "A")"
-    test_dns_ans="$(echo "$test_dns" | jq '.RecordData[0]' | sed 's/"//g')"
+    test_dns_ans="$(printf '%s' "$test_dns" | jq '.RecordData[0]' | sed 's/"//g')"
 fi
 
 if [ -z "$test_dns_ans" ]; then
@@ -151,7 +151,7 @@ fi
 if [ "$checkip_ans" != "$test_dns_ans" ]; then
     printf 'Record out of date -- attempting update\n'
     if [ "$debug" ]; then
-        echo 1
+        true
     else
         printf '%s' "$update_json" > "$tempfile"
         aws route53 change-resource-record-sets --hosted-zone-id "$zone_id" \
