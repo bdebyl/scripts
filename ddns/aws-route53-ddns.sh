@@ -1,50 +1,105 @@
-#!/bin/bash
-LOGGER_TAG="[AWS Route 53 DDNS]"
-
-CHECKIP_HOST="checkip.dyndns.org"
+#!/bin/sh
 CHECKIP_RE="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"
+
+die() {
+    printf '%s\n' "$1" >&2
+    exit 1
+}
+
+show_help() {
+    echo "USAGE: TO-DO"
+    exit
+}
 
 # Check prerequisites
 if [ ! "$(command -v jq)" ]; then
-    logger -t "$LOGGER_TAG" "q'jq' not installed -- exiting"
-    exit 1
+    die 'jq not installed -- exiting'
 fi
 
 if [ ! "$(command -v aws)" ]; then
-    logger -t "$LOGGER_TAG" "'awscli' python package not installed -- exiting"
-    exit 1
+    die 'awscli python package not installed -- exiting'
 fi
 
-# Check expected env vars present
-if [ -z "$ZONE_ID" ]; then
-    logger -t "$LOGGER_TAG" "ZONE_ID not provided -- exiting"
-    exit 1
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help
+            exit
+            ;;
+        -H|--hostname)
+            if [ "$2" ]; then
+                ddns_hostname=$2
+                shift
+            else
+                die 'ERROR: "--host" requires a non-empty option argument!'
+            fi
+            ;;
+        -z|--zone-id)
+            if [ "$2" ]; then
+                zone_id=$2
+                shift
+            else
+                die 'ERROR: "--zone-id" reuqires a non-empty option argument!'
+            fi
+            ;;
+        -d|--debug)
+            debug=1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARN: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)
+            break
+            ;;
+    esac
+
+    shift
+done
+if [ -z "$ddns_hostname" ]; then
+    die 'ERROR: hostname not specified (see -h/--help)'
 fi
 
-if [ -z "$DDNS_HOSTNAME" ]; then
-    logger -t "$LOGGER_TAG" "DDNS_HOSTNAME not provided -- exiting"
-    exit 1
+if [ -z "$zone_id" ]; then
+   die 'ERROR: zone id not specifieid (see -h/--help)'
 fi
 
-CHECKIP="$(curl --silent "$CHECKIP_HOST" 2>&1 | grep -Eo "$CHECKIP_RE")"
-ROUTE53_TEST="$(aws route53 test-dns-answer --hosted-zone-id "$ZONE_ID" --record-name "$DDNS_HOSTNAME" --record-type "A")"
-ROUTE53_IP="$(echo $ROUTE53_TEST | jq '.RecordData[0]' | sed 's/"//g')"
+checkip_ans="$(curl --silent checkip.dyndns.org 2>&1 | grep -Eo "$CHECKIP_RE")"
+if [ -z "$checkip_ans" ]; then
+    die 'ERROR: received bad answer from checkip.dyndns.org (check connection?)'
+fi
 
-UPDATE_FILE="/tmp/aws-route53-ddns-update.json"
+if [ "$debug" ]; then
+    test_dns_ans="$checkip_ans"
+else
+    test_dns="$(aws route53 test-dns-answer --hosted-zone-id "$zone_id" \
+                --record-name "$ddns_hostname" --record-type "A")"
+    test_dns_ans="$(echo "$test_dns" | jq '.RecordData[0]' | sed 's/"//g')"
+fi
 
-UPDATE_CMD=$(cat <<EOF
+if [ -z "$test_dns_ans" ]; then
+   die 'ERROR: received bad ansewr from Route 53 (check aws config?)'
+fi
+
+tempfile="$(mktemp --suffix=.json)"
+
+update_blob=$(cat <<EOF
 {
   "Comment": "Update DDNS home A record",
   "Changes": [
     {
       "Action": "UPSERT",
       "ResourceRecordSet": {
-        "Name": "$DDNS_HOSTNAME",
+        "Name": "$ddns_hostname",
         "Type": "A",
         "TTL": 3600,
         "ResourceRecords": [
           {
-            "Value": "$CHECKIP"
+            "Value": "$checkip_ans"
           }
         ]
       }
@@ -54,18 +109,32 @@ UPDATE_CMD=$(cat <<EOF
 EOF
 )
 
-if [ "$CHECKIP" != "$ROUTE53_IP" ]; then
-    logger -t "$LOGGER_TAG" "Record out of date -- attempting update"
-    echo "$UPDATE_CMD" > "$UPDATE_FILE"
-    aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "file://$UPDATE_FILE"
-    if [ $? -eq 0 ]; then
-        logger -t "$LOGGER_TAG" "Record updated succesfully!"
-        exit 0
+cleanup() {
+    rm "$tempfile"
+}
+# Perform update
+if [ "$checkip_ans" != "$test_dns_ans" ]; then
+    printf 'Record out of date -- attempting update\n'
+    echo "$update_blob" > "$tempfile"
+    if [ "$debug" ]; then
+            echo 1
     else
-        logger -t "$LOGGER_TAG" "Error encountered during update attempt!"
-        exit 1
+        aws route53 change-resource-record-sets --hosted-zone-id "$zone_id"\
+            --change-batch "file://$tempfile"
+    fi
+
+    # Directly checking exit code using 'if $(aws ...)' is invalid for python
+    # based aws-cli
+    # shellcheck disable=SC2181
+    if [ "$?" -eq "0" ]; then
+        printf 'Record updated succesfully!\n'
+        cleanup
+        exit
+    else
+        cleanup
+        die 'ERROR: issue encountered during update attempt!'
     fi
 else
-    logger -t "$LOGGER_TAG" "Record up to date --nothing to do"
-    exit 0
+    printf 'Record up to date --nothing to do\n'
+    cleanup
 fi
