@@ -2,7 +2,8 @@
 CHECKIP_RE="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"
 
 { usage="$(cat)"; }<<'EOF'
-aws-route53-ddns.sh -z|--zone-id <value> -H|--host <value> [OPTIONS]
+USAGE
+    aws-route53-ddns.sh -z|--zone-id <value> -H|--host <value> [-d|--debug]
 
 DESCRIPTION
     Shell script wrapper for AWS Route53 for use in updating a DNS
