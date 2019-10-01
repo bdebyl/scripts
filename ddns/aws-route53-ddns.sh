@@ -1,9 +1,15 @@
 #!/bin/sh
 CHECKIP_RE="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"
 
+cleanup() {
+    if [ -n "$tempfile" ]; then
+        rm "$tempfile"
+    fi
+}
+
 die() {
     printf '%s\n' "$1" >&2
-    exit 1
+    cleanup; exit 1
 }
 
 show_help() {
@@ -65,7 +71,7 @@ if [ -z "$ddns_hostname" ]; then
 fi
 
 if [ -z "$zone_id" ]; then
-   die 'ERROR: zone id not specifieid (see -h/--help)'
+    die 'ERROR: zone id not specifieid (see -h/--help)'
 fi
 
 checkip_ans="$(curl --silent checkip.dyndns.org 2>&1 | grep -Eo "$CHECKIP_RE")"
@@ -82,7 +88,7 @@ else
 fi
 
 if [ -z "$test_dns_ans" ]; then
-   die 'ERROR: received bad ansewr from Route 53 (check aws config?)'
+    die 'ERROR: received bad ansewr from Route 53 (check aws config?)'
 fi
 
 tempfile="$(mktemp --suffix=.json)"
@@ -109,17 +115,14 @@ update_blob=$(cat <<EOF
 EOF
 )
 
-cleanup() {
-    rm "$tempfile"
-}
 # Perform update
 if [ "$checkip_ans" != "$test_dns_ans" ]; then
     printf 'Record out of date -- attempting update\n'
     echo "$update_blob" > "$tempfile"
     if [ "$debug" ]; then
-            echo 1
+        echo 1
     else
-        aws route53 change-resource-record-sets --hosted-zone-id "$zone_id"\
+        aws route53 change-resource-record-sets --hosted-zone-id "$zone_id" \
             --change-batch "file://$tempfile"
     fi
 
@@ -128,13 +131,11 @@ if [ "$checkip_ans" != "$test_dns_ans" ]; then
     # shellcheck disable=SC2181
     if [ "$?" -eq "0" ]; then
         printf 'Record updated succesfully!\n'
-        cleanup
-        exit
     else
-        cleanup
         die 'ERROR: issue encountered during update attempt!'
     fi
 else
-    printf 'Record up to date --nothing to do\n'
-    cleanup
+    printf 'Record up to date -- nothing to do\n'
 fi
+
+cleanup
