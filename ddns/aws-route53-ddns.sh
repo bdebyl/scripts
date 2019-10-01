@@ -1,6 +1,35 @@
 #!/bin/sh
 CHECKIP_RE="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"
 
+{ usage="$(cat)"; }<<'EOF'
+aws-route53-ddns.sh -z|--zone-id <value> -H|--host <value> [OPTIONS]
+
+DESCRIPTION
+    Shell script wrapper for AWS Route53 for use in updating a DNS
+    record. Designed for the use case of a DDNS host to update a hostname for a
+    non-static IP.
+
+    For setting up AWS it is recommended you use a user with a limited policy:
+        {
+          "Version": "2012-10-17"
+          "Statement": [
+            {
+              "Effect": Allow",
+              "Action": [
+                "route53:TestDNSAnswer",
+                "route53:ChangeResourceRecordSets",
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+
+OPTIONS
+    -d                 Debug flag; avoids reaching out to Route53
+    -H, --host         Hostname to be updated (e.g. "myhome.example.net")
+    -z, --zone-id      AWS Zone ID for where the hostname record exists
+EOF
+
 cleanup() {
     if [ -n "$tempfile" ]; then
         rm "$tempfile"
@@ -13,7 +42,7 @@ die() {
 }
 
 show_help() {
-    echo "USAGE: TO-DO"
+    printf '%s\n' "$usage"
     exit
 }
 
@@ -93,7 +122,7 @@ fi
 
 tempfile="$(mktemp --suffix=.json)"
 
-update_blob=$(cat <<EOF
+{ update_json="$(cat)"; } <<EOF
 {
   "Comment": "Update DDNS home A record",
   "Changes": [
@@ -113,15 +142,18 @@ update_blob=$(cat <<EOF
   ]
 }
 EOF
-)
+
+if [ "$debug" ]; then
+    printf 'DEBUG: json output\n%s\n' "$update_json"
+fi
 
 # Perform update
 if [ "$checkip_ans" != "$test_dns_ans" ]; then
     printf 'Record out of date -- attempting update\n'
-    echo "$update_blob" > "$tempfile"
     if [ "$debug" ]; then
         echo 1
     else
+        printf '%s' "$update_json" > "$tempfile"
         aws route53 change-resource-record-sets --hosted-zone-id "$zone_id" \
             --change-batch "file://$tempfile"
     fi
