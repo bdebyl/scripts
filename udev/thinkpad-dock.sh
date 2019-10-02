@@ -77,6 +77,7 @@ case $ACTION in
         switchdisp "$disp_native" "$disp_extern"
         ;;
     *)
-        die 'ERROR: Unknown, or no value for ACTION passed'
+        printf 'ERROR: Unknown, or no value for ACTION passed\n'
+        show_help
         ;;
 esac
