@@ -76,7 +76,7 @@ while :; do
                 zone_id=$2
                 shift
             else
-                die 'ERROR: "--zone-id" reuqires a non-empty option argument!'
+                die 'ERROR: "--zone-id" requires a non-empty option argument!'
             fi
             ;;
         -d|--debug)
