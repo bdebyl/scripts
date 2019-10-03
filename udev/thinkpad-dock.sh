@@ -63,6 +63,9 @@ if [ -z "$username" ]; then
 fi
 
 switchdisp() {
+    # Allow some time for the interface to fully switch over
+    sleep 1
+
     DISPLAY=:0 su "$username" -c \
            "xrandr --output $1 --auto --primary --output $2 --off"
 }
