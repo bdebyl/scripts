@@ -1,15 +1,14 @@
 #!/bin/sh
 { usage="$(cat)" ; }<<'EOF'
 USAGE
-    taglog.sh [-t|--tag] <tag> [OPTIONS]
+    taglog.sh [OPTIONS] <tag>
 
 DESCRIPTION
-    Returns a formatted list of all git tags until the specified -t/--tag value
+    Returns a formatted list of all git tags until the specified value
     is found.
 
 OPTIONS
     -h, --help              Shows this usage prompt
-    -t, --tag               Tag string to search for (e.g. '1.0.0')
     -P, --path              Path to git directory to search
 
 EXAMPLE
@@ -46,14 +45,6 @@ while :; do
             show_help
             exit
             ;;
-        -t|--tag)
-            if [ "$2" ]; then
-                tag=$2
-                shift
-            else
-                die 'ERROR: tag requires a non-empty option argument!'
-            fi
-            ;;
         -P|--path)
             if [ "$2" ]; then
                 gitdir=$2
@@ -70,7 +61,11 @@ while :; do
             printf 'WARN: Unknown option (ignore): %s\n' "$1" >&2
             ;;
         *)
-            break
+            if [ "$1" ]; then
+               tag=$1
+            else
+                break
+            fi
             ;;
     esac
 
@@ -78,7 +73,7 @@ while :; do
 done
 
 if [ -z "$tag" ]; then
-    printf 'ERROR: required tag option unspecified!'
+    printf 'ERROR: tag unspecified!\n'
     show_help
 fi
 
